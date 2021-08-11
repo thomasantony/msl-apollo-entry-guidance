@@ -26,12 +26,13 @@ def simulate_entry_trajectory(eom: Callable[[float, np.array], np.array],
                               t0: float, 
                               tf: float, 
                               X0: np.array, 
-                              h_f: float, 
+                              term_var_idx: int, 
+                              term_var_val: float,
                               params: dict,
                               bank_angle_fn: Callable[[float, np.array, dict], float],
                               t_eval: Optional[np.array] = None) -> Trajectory:
 
-    altitude_stop_event = lambda t, X, params, _: X[0] - h_f
+    altitude_stop_event = lambda t, X, params, _: X[term_var_idx] - term_var_val
     altitude_stop_event.terminal = True
     altitude_stop_event.direction = -1
     
@@ -40,7 +41,7 @@ def simulate_entry_trajectory(eom: Callable[[float, np.array], np.array],
                    X0, 
                    args=(params, bank_angle_fn), 
                    t_eval=t_eval,
-                   rtol=1e-5, events=altitude_stop_event)
+                   rtol=1e-6, events=altitude_stop_event)
     
     # loop over output and compute bank angle for each timestep
     num_steps = len(output.t)

@@ -7,7 +7,7 @@ from numpy import sin, cos, exp
 round2=lambda x,y=None: round(x+1e-15,y)
 
 class ApolloReferenceData:
-    def __init__(self, X_and_lam: np.array, tspan: np.array, params: dict):
+    def __init__(self, X_and_lam: np.array, u: np.array, tspan: np.array, params: dict):
         """
         X_and_lam: [h, s, v, gam, lamH, lamV, lamGAM, lamU] - 8 x n matrix
         tspan: 1 x n vector
@@ -15,6 +15,7 @@ class ApolloReferenceData:
         self.X_and_lam = X_and_lam
         self.tspan = tspan
         self.params = params
+        self.u = u
 
         assert len(X_and_lam.shape) == 2 and X_and_lam.shape[0] > 1, "Need at least two rows of data"
         self.num_rows = X_and_lam.shape[0]
@@ -24,13 +25,13 @@ class ApolloReferenceData:
         
         self.start_v = X_and_lam[0,2]
 
-        F1, F2, F3, D_m = self._compute_gains()
-
+        F1, F2, F3, D_m, hdot_ref = self._compute_gains_and_ref()
+        F3[-1] = F3[-2]   # Account for F3=0 at t=tf
         # Stack the columns as follows:
         # [t, h, s, v, gam, F1, F2, F3, D/m]
-        self.data = np.column_stack((tspan, X_and_lam[:,:4], F1, F2, F3, D_m))
+        self.data = np.column_stack((tspan, X_and_lam[:,:4], F1, F2, F3, D_m, hdot_ref))
 
-    def _compute_gains(self):
+    def _compute_gains_and_ref(self):
         h = self.X_and_lam[:,0]
         v = self.X_and_lam[:,2]
         gam = self.X_and_lam[:,3]
@@ -46,36 +47,35 @@ class ApolloReferenceData:
         v2 = v*v
         rho = rho0 * exp(-h/H) 
         D_m = rho * v2 / (2 * beta)  # Drag Acceleration (D/m)
-
-        F1 = - h/D_m * lamH
+        hdot = v * sin(gam)
+        
+        F1 = H * lamH/D_m
         F2 = lamGAM/(v * np.cos(gam))
         F3 = lamU
-        return F1, F2, F3, D_m
+        return F1, F2, F3, D_m, hdot
 
     def get_row_by_velocity(self, v: float):
         """
         Returns data row closest to given velocity
         """
-        # Calculate index of velocity nearest to given value
-        # Assuming equally spaced data
-        index = round2((v-self.start_v)/self.delta_v)
-        
-        # Clamp index to valid range of 0 to num_rows-1
-        index = min(max(index, 0), self.num_rows-1)
-        return self.data[index,:]
+        all_v = self.data[:,3]
+        dist_to_v = np.abs(all_v - v)
+        index = min(dist_to_v) == dist_to_v
+        return self.data[index,:][0]
     
     def save(self, filename: str):
         """Saves the reference trajectory data to a file"""
-        np.savez(filename, X_and_lam=self.X_and_lam, tspan=self.tspan, params=self.params)
+        np.savez(filename, X_and_lam=self.X_and_lam, u=self.u, tspan=self.tspan, params=self.params)
 
     @staticmethod
     def load(filename: str):
         """Initializes a new ApolloReferenceData from a saved data file"""
         npzdata = np.load(filename, allow_pickle=True)
         X_and_lam = npzdata.get('X_and_lam')
+        u = npzdata.get('u')
         tspan = npzdata.get('tspan')
         params = npzdata.get('params').item()
-        return ApolloReferenceData(X_and_lam, tspan, params)
+        return ApolloReferenceData(X_and_lam, u, tspan, params)
 
 def traj_eom(t: float, 
              state: np.array, 
