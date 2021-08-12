@@ -4,23 +4,11 @@ from typing import Callable, Optional
 
 class Trajectory:
     """Data structure for holding the result of a simulation run"""
-    def __init__(self, t: float, X: np.array, u: np.array, parameters: dict):
+    def __init__(self, t: float, X: np.array, u: np.array, params: dict):
         self.t = t
         self.X = X
         self.u = u
-        self.parameters = parameters
-        
-    def eval_scalar(self, fn: Callable[[float, np.array], float]):
-        """Applies a function that takes in as its arguments a values of
-           t and X at a single instant in time and returns a scalar
-        """
-        return np.fromiter(
-                    it.starmap(
-                       fn, 
-                       zip(self.t, self.X)
-                    ),
-               dtype=np.float64
-        )
+        self.params = params
 
 def simulate_entry_trajectory(eom: Callable[[float, np.array], np.array], 
                               t0: float, 
